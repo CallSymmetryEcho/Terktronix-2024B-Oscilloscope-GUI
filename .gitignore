@@ -1,0 +1,17 @@
+/data
+/nwm
+/oscillpscope_test
+/plot.ipynb
+/test.py
+/test_function
+voltage_data/hydrogel_test_CH1_20250219_161216.csv
+voltage_data/hydrogel_test_CH2_20250219_161216.csv
+voltage_data/last_waveform_CH1_20250219_161216.csv
+voltage_data/last_waveform_CH2_20250219_161216.csv
+voltage_data/voltage_measurements_20250218_235854.csv
+voltage_data/voltage_vs_time_20250218_235240.csv
+waveform_data/test_20250218_234939/time_index.csv
+__pycache__/nanowire_control.cpython-39.pyc
+__pycache__/nanowire_test_control.cpython-39.pyc
+__pycache__/oscilloscope_acquisition.cpython-39.pyc
+oscilloscope_access.ipynb

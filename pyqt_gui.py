@@ -14,6 +14,7 @@ import os
 from test_function.signal_simulator import SignalSimulator
 from nanowire_control import NanowireController
 from oscilloscope_acquisition import ScopeAcquisition
+from arduino_reader import ArduinoAcquisition
 
 # -------------------- 保存配置对话框 --------------------
 class SaveConfigDialog(QDialog):
@@ -147,6 +148,28 @@ class TestAcquisitionThread(QThread):
             print(f"Error acquiring CH{channel} waveform: {e}")
             return None, None
 
+# -------------------- Arduino数据采集线程 --------------------
+class ArduinoAcquisitionThread(QThread):
+    data_ready = pyqtSignal(dict)
+    
+    def __init__(self, arduino, active_channels):
+        super().__init__()
+        self.arduino = arduino
+        self.active_channels = active_channels
+        self.running = True
+        
+    def run(self):
+        while self.running:
+            try:
+                # 获取Arduino数据
+                data = self.arduino.get_all_channels_data(self.active_channels)
+                if data:
+                    self.data_ready.emit(data)
+                
+                QThread.msleep(50)  # 控制采集频率
+                
+            except Exception as e:
+                print(f"Arduino acquisition error: {e}")
 # -------------------- 数据保存线程 --------------------
 class SaveThread(QThread):
     finished = pyqtSignal(bool)  # 添加完成信号
@@ -218,7 +241,9 @@ class OscilloscopeGUI(QMainWindow):
         self.setMinimumSize(1200, 800)
         self.max_data_points = 1000 # 最大数据点数
 
-       
+        # 添加数据源管理
+        self.data_source = None  # 'scope' 或 'arduino'
+        self.arduino = None      
         
         # 硬件资源管理
         self.rm = pyvisa.ResourceManager()
@@ -618,6 +643,31 @@ class OscilloscopeGUI(QMainWindow):
             self.voltage_labels[ch] = label
             voltage_layout.addWidget(label)
         layout.addWidget(voltage_group)
+
+        #不同的采集设备
+        source_group, source_layout = self._create_standard_group("Data Source", max_height=120)
+        
+        # 添加数据源选择下拉框
+        source_layout.addWidget(QLabel("Select Data Source:"))
+        self.source_selector = QComboBox()
+        self.source_selector.addItems(["Oscilloscope", "Arduino"])
+        self.source_selector.currentTextChanged.connect(self._change_data_source)
+        source_layout.addWidget(self.source_selector)
+        
+        # 添加 Arduino 端口设置
+        self.port_selector = QComboBox()
+        self.port_selector.setEnabled(False)
+        self.btn_refresh_ports = QPushButton("Refresh Ports")
+        self.btn_refresh_ports.clicked.connect(self._refresh_serial_ports)
+        self.btn_refresh_ports.setEnabled(False)
+        
+        port_layout = QHBoxLayout()
+        port_layout.addWidget(QLabel("Arduino Port:"))
+        port_layout.addWidget(self.port_selector)
+        port_layout.addWidget(self.btn_refresh_ports)
+        source_layout.addLayout(port_layout)
+        
+        layout.addWidget(source_group)
         
         # 控制按钮
         self.btn_connect = QPushButton("Connect Device")
@@ -852,7 +902,27 @@ class OscilloscopeGUI(QMainWindow):
         
         panel.setLayout(layout)
         return panel
-
+    def _change_data_source(self, source):
+            """切换数据源"""
+            if source == "Arduino":
+                self.btn_connect.setText("Connect Arduino")
+                self.port_selector.setEnabled(True)
+                self.btn_refresh_ports.setEnabled(True)
+                self._refresh_serial_ports()
+                self.data_source = "arduino"
+            else:
+                self.btn_connect.setText("Connect Device")
+                self.port_selector.setEnabled(False)
+                self.btn_refresh_ports.setEnabled(False)
+                self.data_source = "scope"
+    
+    def _refresh_serial_ports(self):
+        """刷新可用串口列表"""
+        import serial.tools.list_ports
+        
+        self.port_selector.clear()
+        ports = [port.device for port in serial.tools.list_ports.comports()]
+        self.port_selector.addItems(ports)
     # -------------------- 槽函数 --------------------
     @pyqtSlot(dict)
     def _update_plots(self, data_dict):
@@ -921,31 +991,45 @@ class OscilloscopeGUI(QMainWindow):
 
     # -------------------- 业务逻辑 --------------------
     def _connect_scope(self):
-        try:
-            resources = self.rm.list_resources()
-            for resource in resources:
-                if 'USB' in resource:
-                    self.scope = self.rm.open_resource(
-                        resource,
-                        timeout=5000,
-                        read_termination='\n',
-                        write_termination='\n'
-                    )
-                    idn = self.scope.query("*IDN?").strip()
-                    self.status_bar.showMessage(f"Connected: {idn}")
-                    
-                    # 配置默认通道参数
-                    for ch in self.channels:
-                        self.scope.write(f"CH{ch}:COUPLING DC")
-                        self.scope.write(f"CH{ch}:SCALE 2.0")
-                    
-                    self.btn_start.setEnabled(True)
-                    self.btn_connect.setEnabled(False)
-                    self.btn_collect_start.setEnabled(True)  # Enable data collection after connection
-                    return
-            self.status_bar.showMessage("No compatible device found!")
-        except Exception as e:
-            self.status_bar.showMessage(f"Connection error: {str(e)}")
+        """连接设备（示波器或Arduino）"""
+        if self.data_source == "arduino":
+            try:
+                port = self.port_selector.currentText()
+                self.arduino = ArduinoAcquisition(port=port)
+                self.status_bar.showMessage(f"Connected to Arduino on {port}")
+                self.btn_start.setEnabled(True)
+                self.btn_connect.setEnabled(False)
+                self.btn_collect_start.setEnabled(True)
+            except Exception as e:
+                self.status_bar.showMessage(f"Arduino connection error: {str(e)}")
+        else:
+            # 原有的示波器连接代码
+            
+            try:
+                resources = self.rm.list_resources()
+                for resource in resources:
+                    if 'USB' in resource:
+                        self.scope = self.rm.open_resource(
+                            resource,
+                            timeout=5000,
+                            read_termination='\n',
+                            write_termination='\n'
+                        )
+                        idn = self.scope.query("*IDN?").strip()
+                        self.status_bar.showMessage(f"Connected: {idn}")
+                        
+                        # 配置默认通道参数
+                        for ch in self.channels:
+                            self.scope.write(f"CH{ch}:COUPLING DC")
+                            self.scope.write(f"CH{ch}:SCALE 2.0")
+                        
+                        self.btn_start.setEnabled(True)
+                        self.btn_connect.setEnabled(False)
+                        self.btn_collect_start.setEnabled(True)  # Enable data collection after connection
+                        return
+                self.status_bar.showMessage("No compatible device found!")
+            except Exception as e:
+                self.status_bar.showMessage(f"Connection error: {str(e)}")
 
     def _update_active_channels(self):
         self.active_channels = [ch for ch, cb in self.channel_checkboxes.items() if cb.isChecked()]
@@ -975,6 +1059,11 @@ class OscilloscopeGUI(QMainWindow):
                 self.max_amplitude_spin.value(),
                 self.frequency_spin.value()
             )
+        elif self.data_source == "arduino":
+            # Arduino模式
+            self.acquisition_thread = ArduinoAcquisitionThread(self.arduino, self.active_channels)
+            self.acquisition_thread.data_ready.connect(self._update_plots)
+            self.acquisition_thread.start()
         else:
             # 实际设备模式
             self.acquisition_thread = AcquisitionThread(self.scope, self.active_channels)

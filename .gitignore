@@ -3,7 +3,6 @@
 /oscillpscope_test
 /plot.ipynb
 /test.py
-/test_function
 voltage_data/hydrogel_test_CH1_20250219_161216.csv
 voltage_data/hydrogel_test_CH2_20250219_161216.csv
 voltage_data/last_waveform_CH1_20250219_161216.csv
@@ -15,3 +14,10 @@ __pycache__/nanowire_control.cpython-39.pyc
 __pycache__/nanowire_test_control.cpython-39.pyc
 __pycache__/oscilloscope_acquisition.cpython-39.pyc
 oscilloscope_access.ipynb
+test_function/__pycache__/signal_simulator.cpython-39.pyc
+test_function/__pycache__/signal_simulator.cpython-39.pyc
+test_function/HF_monitor.py
+test_function/monitor_1.py
+test_function/monitor_2.py
+test_function/mutichannel.py
+test_function/oscilloscope_demo.py

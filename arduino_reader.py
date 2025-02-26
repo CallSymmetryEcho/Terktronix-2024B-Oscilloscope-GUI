@@ -10,38 +10,75 @@ class ArduinoAcquisition:
         self.sample_rate = 0.05  # 采样率（秒）
         time.sleep(2)  # 等待Arduino初始化
         self._configure_arduino()
+        self.is_running = False
     
     def _configure_arduino(self):
         try:
-            # 清空缓冲区
             self.serial.reset_input_buffer()
             self.serial.reset_output_buffer()
-            
+            # 设置较小的读取超时
+            self.serial.timeout = 0.2  # 100ms超时
+            # 设置较大的写入缓冲区
+            self.serial.write_buffer_size = 1024
         except Exception as e:
             print(f"Error configuring Arduino: {e}")
     
+    def start_acquisition(self):
+        """开始数据采集"""
+        try:
+            self.serial.write(b'start\n')
+            response = self.serial.readline().decode().strip()
+            if "Recording started" in response:
+                self.is_running = True
+                self.start_time = datetime.datetime.now()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error starting acquisition: {e}")
+            return False
+    
+    def stop_acquisition(self):
+        """停止数据采集"""
+        try:
+            self.serial.write(b'stop\n')
+            response = self.serial.readline().decode().strip()
+            if "Recording stopped" in response:
+                self.is_running = False
+                return True
+            return False
+        except Exception as e:
+            print(f"Error stopping acquisition: {e}")
+            return False
+
     def get_all_channels_data(self, channels):
         try:
+            if not self.is_running:
+                return None
+                
             data_dict = {}
             current_time = datetime.datetime.now()
 
             if self.start_time is None:
                 self.start_time = current_time
             
+            # 清空多余数据
+            if self.serial.in_waiting > 1000:
+                self.serial.reset_input_buffer()
+            
             elapsed_time = (current_time - self.start_time).total_seconds()
             
-            # 读取Arduino发送的数据
             try:
                 line = self.serial.readline().decode().strip()
-                values = [float(x) for x in line.split(',')[:-1]]  # 最后一个逗号后是空值
+                if not line:  # 如果是空行则跳过
+                    return None
+                    
+                values = [float(x) for x in line.split(',')[:-1]]
                 
                 for i, ch in enumerate(channels):
                     if i < len(values):
-                        # 创建与示波器数据格式相同的结构
                         current_voltage = np.array([values[i]])
                         current_time_point = np.array([elapsed_time])
                         
-                        # 创建模拟的波形数据（如果需要显示）
                         sample_count = 500
                         full_time = np.linspace(elapsed_time-0.05, elapsed_time, sample_count)
                         full_voltage = np.ones(sample_count) * values[i]
@@ -52,7 +89,8 @@ class ArduinoAcquisition:
                         )
                         
             except Exception as ch_e:
-                print(f"Error reading channel {ch}: {ch_e}")
+                print(f"Error reading channel data: {ch_e}")
+                return None
                 
             return data_dict if data_dict else None
             

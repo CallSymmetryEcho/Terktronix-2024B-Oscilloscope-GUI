@@ -73,7 +73,7 @@ class AcquisitionThread(QThread):
                     # }
                     self.data_ready.emit(data)
                 
-                QThread.msleep(50)  # 控制采集频率
+                QThread.msleep(20)  # 控制采集频率
                 
             except Exception as e:
                 print(f"Acquisition error: {e}")
@@ -159,17 +159,25 @@ class ArduinoAcquisitionThread(QThread):
         self.running = True
         
     def run(self):
+        # 启动Arduino数据采集
+        if not self.arduino.start_acquisition():
+            print("Failed to start Arduino acquisition")
+            return
+            
         while self.running:
             try:
-                # 获取Arduino数据
                 data = self.arduino.get_all_channels_data(self.active_channels)
                 if data:
                     self.data_ready.emit(data)
-                
-                QThread.msleep(50)  # 控制采集频率
+                QThread.msleep(20)
                 
             except Exception as e:
                 print(f"Arduino acquisition error: {e}")
+                
+    def stop(self):
+        self.running = False
+        self.arduino.stop_acquisition()
+
 # -------------------- 数据保存线程 --------------------
 class SaveThread(QThread):
     finished = pyqtSignal(bool)  # 添加完成信号
@@ -1086,6 +1094,8 @@ class OscilloscopeGUI(QMainWindow):
     def _stop_acquisition(self):
         self.running = False
         if self.acquisition_thread:
+            if isinstance(self.acquisition_thread, ArduinoAcquisitionThread):
+                self.acquisition_thread.stop()  # 使用专门的停止方法
             self.acquisition_thread.running = False
             self.acquisition_thread.quit()
             self.acquisition_thread.wait()
@@ -1214,6 +1224,14 @@ class OscilloscopeGUI(QMainWindow):
         self.btn_collect_start.setEnabled(False)
         self.btn_collect_stop.setEnabled(True)
         self.status_bar.showMessage("Data collection started...")
+
+        # 如果是Arduino模式，发送开始命令
+        if self.data_source == "arduino" and self.arduino:
+            if not self.arduino.start_acquisition():
+                self.status_bar.showMessage("Failed to start Arduino recording")
+                return
+        
+        self.status_bar.showMessage("Data collection started...")
     
     def _stop_data_collection(self):
         """停止数据收集并保存数据"""
@@ -1221,6 +1239,13 @@ class OscilloscopeGUI(QMainWindow):
             return
             
         self.collecting = False
+
+        # 如果是Arduino模式，发送停止命令
+        if self.data_source == "arduino" and self.arduino:
+                    if not self.arduino.stop_acquisition():
+                        self.status_bar.showMessage("Failed to stop Arduino recording")
+                        return
+
         self.btn_collect_start.setEnabled(True)
         self.btn_collect_stop.setEnabled(False)
         

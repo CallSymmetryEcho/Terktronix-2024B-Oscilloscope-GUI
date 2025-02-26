@@ -21,3 +21,8 @@ with proper Arduino nano or better board and RC low pass circuits, confident mea
 Solve the Nanowire controller Channel Updating bug -- A recursion problem when I wrote the code.
 
 Solve the Nanowire controller threshold Updating bug
+
+Solve the issue communicating with nanocontroller AWG
+
+
+Solve bug on linuxmint the return in linux mint is different from mac use '\r' instead of '\n'

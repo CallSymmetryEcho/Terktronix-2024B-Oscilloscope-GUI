@@ -90,6 +90,11 @@ class NanowireController:
                 self.move_y(voltage)
         else:
             self.current_status['voltage'] = 0.0
+             # Apply movement
+            if axis_level:  # X-axis movement
+                self.move_x(0)
+            else:  # Y-axis movement
+                self.move_y(0)
     
     def move_x(self, voltage):
         """Move nanowire in X direction"""

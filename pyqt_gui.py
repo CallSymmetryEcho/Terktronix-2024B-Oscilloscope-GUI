@@ -308,7 +308,7 @@ class OscilloscopeGUI(QMainWindow):
         return group, layout
 
     def _create_labeled_spinbox(self, label_text, min_val, max_val, default_val, step=1.0, double=False):
-        """Helper method to create a labeled spinbox"""
+        """Helper method to create   labeled spinbox"""
         layout = QHBoxLayout()
         layout.addWidget(QLabel(label_text))
         spin = QDoubleSpinBox() if double else QSpinBox()
@@ -418,49 +418,8 @@ class OscilloscopeGUI(QMainWindow):
             self.subplots[ch].enableAutoRange()
             self.subplots[ch].replot()
 
-    def _update_nanowire_channels(self):
-        """Update nanowire controller channel settings"""
-        self.nanowire_controller.set_channels(
-            self.movement_ch_spin.value(),
-            self.direction_ch_spin.value(),
-            self.axis_ch_spin.value()
-        )
     
-    def _update_voltage_threshold(self, channel_type):
-        """Update nanowire controller voltage threshold"""
-        if channel_type == 'movement':
-            self.nanowire_controller.set_voltage_threshold(self.movement_threshold_spin.value(), 'movement')
-        elif channel_type == 'direction':
-            self.nanowire_controller.set_voltage_threshold(self.direction_threshold_spin.value(), 'direction')
-        elif channel_type == 'axis':
-            self.nanowire_controller.set_voltage_threshold(self.axis_threshold_spin.value(), 'axis')
-    
-    def _update_movement_voltage(self):
-        """Update nanowire controller movement voltage"""
-        self.nanowire_controller.set_movement_voltage(self.movement_voltage_spin.value())
-    
-    def _update_nanowire_test_mode(self, state):
-        """Update nanowire controller test mode based on checkbox state"""
-        is_test_mode = state == Qt.Checked
-        self.nanowire_controller.set_test_mode(is_test_mode)
-        
-        # Update status labels
-        status = self.nanowire_controller.get_status()
-        self._update_nanowire_status(status)
-        
-    def _update_nanowire_status(self, status):
-        """Update nanowire control status display"""
-        # Update movement status
-        self.moving_label.setText("Moving" if status['is_moving'] else "Not Moving")
-        
-        # Update direction status
-        self.direction_label.setText(status['direction'])
-        
-        # Update axis status
-        self.axis_label.setText(status['axis'])
-        
-        # Update voltage status
-        self.voltage_label.setText(f"{status['voltage']:.3f} V")
+  
 
     def _update_test_mode(self, state):
         # Enable/disable test mode controls
@@ -613,7 +572,7 @@ class OscilloscopeGUI(QMainWindow):
         test_layout.addLayout(amp_layout)
         
         # 频率设置
-        freq_layout, self.frequency_spin = self._create_labeled_spinbox("Frequency (Hz):", 0.1, 100.0, 1.0, 0.1, True)
+        freq_layout, self.frequency_spin = self._create_labeled_spinbox("Frequency (Hz):", 0.1, 150.0, 20.0, 0.1, True)
         test_layout.addLayout(freq_layout)
         
         # 添加触发按钮
@@ -639,7 +598,7 @@ class OscilloscopeGUI(QMainWindow):
         
         # 采集设置
         settings_group, settings_layout = self._create_standard_group("Acquisition Settings", max_height=100)
-        interval_layout, self.interval_spin = self._create_labeled_spinbox("Update Interval (ms):", 50, 5000, 200, 50)
+        interval_layout, self.interval_spin = self._create_labeled_spinbox("Update Interval (ms):", 10, 5000, 200, 50)
         settings_layout.addLayout(interval_layout)
         layout.addWidget(settings_group)
         
@@ -742,6 +701,7 @@ class OscilloscopeGUI(QMainWindow):
         self.axis_ch_spin.valueChanged.connect(self._update_nanowire_channels)
         channel_settings_layout.addLayout(axis_ch_layout)
         
+        
         nanowire_layout.addWidget(channel_settings)
         
         # Voltage Settings
@@ -766,7 +726,10 @@ class OscilloscopeGUI(QMainWindow):
         movement_v_layout, self.movement_voltage_spin = self._create_labeled_spinbox("Movement (V):", 0.0, 10.0, 1.0, 0.1, True)
         self.movement_voltage_spin.valueChanged.connect(self._update_movement_voltage)
         voltage_settings_layout.addLayout(movement_v_layout)
-        
+       # 添加更新按钮
+        update_channels_btn = QPushButton("Update Channels Settings")
+        update_channels_btn.clicked.connect(self._force_update_channels)
+        channel_settings_layout.addWidget(update_channels_btn) 
         nanowire_layout.addWidget(voltage_settings)
         
         # Status Display
@@ -950,6 +913,14 @@ class OscilloscopeGUI(QMainWindow):
                             self.direction_ch_spin.value(), 
                             self.axis_ch_spin.value()]:
                     control_signals[ch] = current_voltage_value
+                 # 收集纳米线控制信号
+                # print(f"check the type {type(ch)} {ch}")
+                # if ch == self.movement_ch_spin.value():
+                #     control_signals['movement'] = current_voltage_value
+                # elif ch == self.direction_ch_spin.value():
+                #     control_signals['direction'] = current_voltage_value
+                # elif ch == self.axis_ch_spin.value():
+                #     control_signals['axis'] = current_voltage_value 
 
                 if ch in self.active_channels:
                     # 更新实时波形
@@ -995,6 +966,7 @@ class OscilloscopeGUI(QMainWindow):
 
         except Exception as e:
             print(f"Error updating plots: {e}")
+            print(f"Control signals: {control_signals}")
 
 
     # -------------------- 业务逻辑 --------------------
@@ -1156,6 +1128,7 @@ class OscilloscopeGUI(QMainWindow):
         """Update nanowire controller voltage threshold"""
         if channel_type == 'movement':
             self.nanowire_controller.set_voltage_threshold(self.movement_threshold_spin.value(), 'movement')
+            print(f"movement threshold {self.movement_threshold_spin.value()}")
         elif channel_type == 'direction':
             self.nanowire_controller.set_voltage_threshold(self.direction_threshold_spin.value(), 'direction')
         elif channel_type == 'axis':
@@ -1187,6 +1160,19 @@ class OscilloscopeGUI(QMainWindow):
         
         # Update voltage status
         self.voltage_label.setText(f"{status['voltage']:.3f} V")
+    
+    def _force_update_channels(self):
+        """强制更新纳米线控制器的通道设置"""
+        self._update_nanowire_channels()
+        self._update_voltage_threshold('movement')
+        self._update_voltage_threshold('direction')
+        self._update_voltage_threshold('axis')
+        self._update_movement_voltage()
+        print(f"Force update channels")
+        # 获取并更新状态显示
+        status = self.nanowire_controller.get_status()
+        self._update_nanowire_status(status)
+        self.status_bar.showMessage("Nanowire channels updated")
 
     def _update_test_mode(self, state):
         # Enable/disable test mode controls
@@ -1276,54 +1262,7 @@ class OscilloscopeGUI(QMainWindow):
         
         self.collection_data = {}
     
-    # def _update_plots(self, data_dict):
-    #     """ 更新所有通道的图表显示 """
-    #     try:
-    #         for ch, (timestamp, time, voltage) in data_dict.items():
-    #             current_voltage = voltage[-1]
-    #             current_time = timestamp - self.start_time
-
-    #             # 更新纳米线控制器状态
-    #             if ch in [self.movement_ch_spin.value(), 
-    #                      self.direction_ch_spin.value(), 
-    #                      self.axis_ch_spin.value()]:
-    #                 self.nanowire_controller.update_control_signals({ch: current_voltage})
-    #                 status = self.nanowire_controller.get_status()
-    #                 self._update_nanowire_status(status)
-
-    #             if ch in self.active_channels:
-    #                 # 更新实时波形
-    #                 self.subplots[ch].setVisible(True)
-    #                 self.wave_curves[ch].setData(time, voltage)
-                    
-    #                 # 更新历史电压图
-    #                 self.history_plots[ch].setVisible(True)
-    #                 if ch not in self.data:
-    #                     self.data[ch] = []
-                    
-    #                 self.data[ch].append([current_time, current_voltage])
-                    
-    #                 # 如果正在收集数据，保存到collection_data
-    #                 if self.collecting and ch in self.collection_data:
-    #                     self.collection_data[ch].append([current_time, current_voltage])
-                    
-    #                 # 转换数据格式用于绘图
-    #                 data_array = np.array(self.data[ch])
-    #                 self.history_curves[ch].setData(data_array[:, 0], data_array[:, 1])
-                    
-    #                 # 更新实时电压显示
-    #                 self.voltage_labels[ch].setText(f"CH{ch}: {current_voltage:.3f} V")
-    #             else:
-    #                 self.subplots[ch].setVisible(False)
-    #                 self.history_plots[ch].setVisible(False)
-            
-    #         # 更新进度条
-    #         elapsed = timestamp - self.start_time
-    #         self.progress_bar.setValue(int(elapsed % 100))
-
-    #     except Exception as e:
-    #         print(f"Error updating plots: {e}")
-    
+   
     def _change_storage_path(self):
         new_path = QFileDialog.getExistingDirectory(self, "Select Storage Directory", self.data_dir)
         if new_path:

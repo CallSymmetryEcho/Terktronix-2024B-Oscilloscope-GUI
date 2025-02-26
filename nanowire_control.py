@@ -30,6 +30,7 @@ class NanowireController:
         self.movement_channel = movement_ch
         self.direction_channel = direction_ch
         self.axis_channel = axis_ch
+        print(f"Channels set: Movement={movement_ch}, Direction={direction_ch}, Axis={axis_ch}")
     
     def set_voltage_threshold(self, threshold, channel_type='all'):
         """Set the voltage threshold for high/low level detection
@@ -66,10 +67,6 @@ class NanowireController:
     
     def update_control_signals(self, voltages):
         """Update control status based on input voltages from channels"""
-        if self.test_mode and self.test_controller:
-            self.test_controller.update_control_signals(voltages)
-            self.current_status = self.test_controller.get_status()
-            return
 
         # Get voltage levels from control channels
         movement_level = voltages.get(self.movement_channel, 0) > self.movement_threshold

@@ -1,4 +1,4 @@
-const int CHANNELS[] = {A0, A1, A2};  // 模拟输入引脚
+const int CHANNELS[] = {A0, A1, A2, A3};  // 模拟输入引脚
 const int SAMPLE_INTERVAL = 50;       // 采样间隔(ms)
 bool isRunning = false;               // 运行状态标志
 
@@ -25,7 +25,7 @@ void loop() {
     for (int i = 0; i < sizeof(CHANNELS)/sizeof(CHANNELS[0]); i++) {
       int value = analogRead(CHANNELS[i]);
       float voltage = value * (5.0 / 1023.0);
-      Serial.print(voltage, 3);
+      Serial.print(voltage, 4);
       Serial.print(",");
     }
     Serial.println();

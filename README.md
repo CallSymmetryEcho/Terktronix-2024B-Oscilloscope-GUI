@@ -14,4 +14,10 @@
 ![](https://lskypro.bin-lian.me/i/2025/02/25/67bd6268d8b14.png)
 
 
-with proper Arduino nano, confident measure signal change < 10ms
+with proper Arduino nano or better board and RC low pass circuits, confident measure signal change < 10ms wit smooth signal detection
+
+## 2025/02/26
+
+Solve the Nanowire controller Channel Updating bug -- A recursion problem when I wrote the code.
+
+Solve the Nanowire controller threshold Updating bug

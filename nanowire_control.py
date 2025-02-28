@@ -93,18 +93,22 @@ class NanowireController:
             voltage = self.movement_voltage if direction_level else -self.movement_voltage
             self.current_status['voltage'] = voltage
             
-            # Apply movement
-            if axis_level:  # X-axis movement
-                self.move_x(voltage)
-            else:  # Y-axis movement
-                self.move_y(voltage)
+            # 如果PID模式启用，根据电压阈值更新目标位置
+            if self.pid_mode:
+                self.update_target_by_voltage_threshold(movement_level, direction_level, axis_level)
+            else:
+                # 非PID模式下，直接应用电压移动
+                if axis_level:  # X-axis movement
+                    self.move_x(voltage)
+                else:  # Y-axis movement
+                    self.move_y(voltage)
                 
-            # If PID mode is enabled, calculate pixel movement based on time
-            if self.pid_mode and self.selected_nanowire_id is not None:
-                self._update_position_by_voltage_time(movement_level, direction_level, axis_level)
+                # If PID mode is enabled, calculate pixel movement based on time
+                if self.pid_mode and self.selected_nanowire_id is not None:
+                    self._update_position_by_voltage_time(movement_level, direction_level, axis_level)
         else:
             self.current_status['voltage'] = 0.0
-             # Apply movement
+            # Apply movement
             if axis_level:  # X-axis movement
                 self.move_x(0)
             else:  # Y-axis movement
@@ -112,6 +116,48 @@ class NanowireController:
             
             # Reset movement time when voltage drops below threshold
             self.last_movement_time = None
+    
+    def update_target_by_voltage_threshold(self, movement_level, direction_level, axis_level):
+        """根据电压阈值更新目标位置
+        
+        Args:
+            movement_level: 移动通道电压是否超过阈值
+            direction_level: 方向通道电压是否超过阈值
+            axis_level: 轴选择通道电压是否超过阈值
+        """
+        # 如果不移动，不更新目标位置
+        if not movement_level:
+            return
+            
+        # 设置每次移动的步长（像素）
+        step_size = 10
+        
+        # 根据方向确定步长正负
+        if not direction_level:  # 负方向
+            step_size = -step_size
+            
+        # 确保目标位置已初始化
+        if self.target_x is None:
+            self.target_x = self.current_position['x']
+        if self.target_y is None:
+            self.target_y = self.current_position['y']
+            
+        # 根据轴选择更新X或Y目标位置
+        if axis_level:  # X轴
+            self.target_x += step_size
+            # 确保在屏幕范围内（假设屏幕分辨率为1920x1080）
+            self.target_x = max(0, min(1920, self.target_x))
+        else:  # Y轴
+            self.target_y += step_size
+            # 确保在屏幕范围内
+            self.target_y = max(0, min(1080, self.target_y))
+            
+        # 应用PID控制移动到新目标位置
+        self._apply_pid_control()
+        
+        # 记录当前时间，用于计算下一次移动
+        import time
+        self.last_movement_time = time.time()
     
     def move_x(self, voltage):
         """Move nanowire in X direction"""
@@ -132,14 +178,18 @@ class NanowireController:
         """Enable or disable PID control mode"""
         self.pid_mode = enabled
         if enabled:
-            # Select nanowire and get initial position
-            self._select_nanowire()
-            self._update_current_position()
-            # Initialize target position to current position
-            if self.target_x is None:
-                self.target_x = self.current_position['x']
-            if self.target_y is None:
-                self.target_y = self.current_position['y']
+            # 如果是测试模式，使用默认位置
+            if self.test_mode:
+                self.current_position = {'x': 960, 'y': 540, 'theta': 0.0}
+            else:
+                # 选择纳米线并获取初始位置
+                self._select_nanowire()
+                self._update_current_position()
+                
+            # 初始化目标位置为当前位置
+            self.target_x = self.current_position['x']
+            self.target_y = self.current_position['y']
+            
             print(f"PID mode enabled. Current position: x={self.current_position['x']}, y={self.current_position['y']}")
         else:
             print("PID mode disabled")
@@ -243,7 +293,12 @@ class NanowireController:
     
     def _apply_pid_control(self):
         """Apply PID control to move nanowire to target position"""
-        if not self.test_mode and self.selected_nanowire_id is not None:
+        if self.test_mode:
+            # 测试模式下，只更新目标位置，不实际控制硬件
+            print(f"[TEST] Moving to target: x={self.target_x}, y={self.target_y}")
+            return
+            
+        if self.selected_nanowire_id is not None:
             try:
                 # Set PID setpoints
                 controller.set_x_pid_setpoint(self.target_x)

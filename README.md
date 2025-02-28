@@ -26,3 +26,11 @@ Solve the issue communicating with nanocontroller AWG
 
 
 Solve bug on linuxmint the return in linux mint is different from mac use '\r' instead of '\n'
+
+## 2025/02/27
+
+adding the nanowire controller PID controller features
+- Canvas for PID status monitoring
+- real time PID Control
+
+the Minor bug is still exist, but the basic PID control is working now.

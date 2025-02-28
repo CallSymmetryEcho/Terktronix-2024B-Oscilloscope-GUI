@@ -21,3 +21,4 @@ test_function/monitor_1.py
 test_function/monitor_2.py
 test_function/mutichannel.py
 test_function/oscilloscope_demo.py
+patterndemon.py

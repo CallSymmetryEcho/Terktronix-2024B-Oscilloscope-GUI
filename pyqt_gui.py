@@ -5,12 +5,13 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                            QHBoxLayout, QPushButton, QCheckBox, QGroupBox, 
                            QLabel, QSpinBox, QFileDialog, QProgressBar, QDialog,
                            QDialogButtonBox, QFormLayout, QInputDialog, QComboBox,
-                           QDoubleSpinBox, QGridLayout,QScrollArea)
+                           QDoubleSpinBox, QGridLayout,QScrollArea,QTabWidget)
 from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal, pyqtSlot
 import pyqtgraph as pg
 from datetime import datetime
 import csv
 import os
+import time
 from test_function.signal_simulator import SignalSimulator
 from nanowire_control import NanowireController
 from oscilloscope_acquisition import ScopeAcquisition
@@ -22,9 +23,6 @@ class SaveConfigDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Select Channels to Save")
         self.setMinimumSize(300, 200)
-
-        
-
 
         
         layout = QVBoxLayout()
@@ -274,6 +272,10 @@ class OscilloscopeGUI(QMainWindow):
         
         # 纳米线控制器
         self.nanowire_controller = NanowireController()
+
+
+        # 轨迹初始化
+        self.target_trajectory = []
         
         # 初始化界面
         self._init_ui()
@@ -284,11 +286,11 @@ class OscilloscopeGUI(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
         
-        # 左侧控制面板
+        # 左侧控制面板（使用标签页组织）
         control_panel = self._create_control_panel()
         main_layout.addWidget(control_panel)
         
-        # 右侧图表区域
+        # 右侧图表区域（保持不变）
         plot_panel = self._create_plot_panel()
         main_layout.addWidget(plot_panel)
         
@@ -517,20 +519,58 @@ class OscilloscopeGUI(QMainWindow):
     def _create_control_panel(self):
         # Create main panel
         panel = QGroupBox("Control Panel")
-        panel.setFixedWidth(400)
+        panel.setFixedWidth(500)
         
-        # Create scroll area
+
+        # create tab layout
+        tab_widget = QTabWidget()
+
+         # 创建信号采集标签页
+        acquisition_tab = self._create_acquisition_tab()
+        tab_widget.addTab(acquisition_tab, "signal acquisition")
+        
+        # 创建纳米线控制标签页
+        nanowire_tab = self._create_nanowire_control_tab()
+        tab_widget.addTab(nanowire_tab, "NW control")
+
+        # # Create scroll area
+        # scroll = QScrollArea()
+        # scroll.setWidgetResizable(True)
+        # scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # # Create container widget for scroll area
+        # container = QWidget()
+        # layout = QVBoxLayout()
+        # layout.setSpacing(10)
+        # layout.setContentsMargins(10, 10, 10, 10)
+
+            # 创建主面板布局并添加标签页组件
+        panel_layout = QVBoxLayout()
+        panel_layout.addWidget(tab_widget)
+        panel.setLayout(panel_layout)
+
+        self._update_nanowire_test_mode(Qt.Checked) 
+    
+
+        return panel
+
+    def _create_acquisition_tab(self):
+        # 创建信号采集标签页内容
+        tab = QWidget()
+        
+        # 创建滚动区域
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
-        # Create container widget for scroll area
+        # 创建容器组件
         container = QWidget()
         layout = QVBoxLayout()
         layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
-        
+    
         # 数据存储设置
         storage_group, storage_layout = self._create_standard_group("Storage Settings", max_height=120)
         
@@ -667,24 +707,76 @@ class OscilloscopeGUI(QMainWindow):
         collection_layout.addWidget(self.btn_collect_start)
         collection_layout.addWidget(self.btn_collect_stop)
         collection_group.setLayout(collection_layout)
+
+        # 添加按钮到布局
+        buttons_layout = QVBoxLayout()
+        buttons_layout.addWidget(self.btn_connect)
+        buttons_layout.addWidget(self.btn_start)
+        buttons_layout.addWidget(self.btn_stop)
+        buttons_layout.addWidget(self.btn_save)
         
+        layout.addLayout(buttons_layout)
+        layout.addWidget(collection_group)
+        
+        # 设置容器布局
+        container.setLayout(layout)
+        
+        # 将容器添加到滚动区域
+        scroll.setWidget(container)
+        
+        # 创建标签页布局
+        tab_layout = QVBoxLayout()
+        tab_layout.addWidget(scroll)
+        tab.setLayout(tab_layout)
+
+        return tab
+
+
+    def _create_nanowire_control_tab(self):
+        # 创建纳米线控制标签页内容
+        tab = QWidget()
+        
+        # 创建滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)  # 修改为需要时显示水平滚动条
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # 创建容器组件
+        container = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+
         # 纳米线控制组
-        nanowire_group, nanowire_layout = self._create_standard_group("Nanowire Control", max_height=400)
+        nanowire_group = QGroupBox("Nanowire Control")
+        nanowire_layout = QVBoxLayout()
+        nanowire_layout.setSpacing(15)  # 增加间距
         
         # Test Mode Toggle
         test_mode_layout = QHBoxLayout()
         test_mode_layout.addWidget(QLabel("Test Mode:"))
         self.nanowire_test_mode_cb = QCheckBox()
         self.nanowire_test_mode_cb.setChecked(True)
-        
-
         self.nanowire_test_mode_cb.stateChanged.connect(self._update_nanowire_test_mode)
         test_mode_layout.addWidget(self.nanowire_test_mode_cb)
         test_mode_layout.addStretch()
         nanowire_layout.addLayout(test_mode_layout)
         
+        # PID Mode Toggle
+        pid_mode_layout = QHBoxLayout()
+        pid_mode_layout.addWidget(QLabel("PID Control Mode:"))
+        self.pid_mode_cb = QCheckBox()
+        self.pid_mode_cb.setChecked(False)
+        self.pid_mode_cb.stateChanged.connect(self._update_pid_mode)
+        pid_mode_layout.addWidget(self.pid_mode_cb)
+        pid_mode_layout.addStretch()
+        nanowire_layout.addLayout(pid_mode_layout)
+
         # Channel Settings
-        channel_settings, channel_settings_layout = self._create_standard_group("Channel Settings")
+        channel_settings = QGroupBox("Channel Settings")
+        channel_settings_layout = QVBoxLayout()
+        channel_settings.setMaximumHeight(200)  # 限制高度
         
         # Movement Channel
         movement_ch_layout, self.movement_ch_spin = self._create_labeled_spinbox("Movement Channel:", 1, 4, 1)
@@ -701,11 +793,18 @@ class OscilloscopeGUI(QMainWindow):
         self.axis_ch_spin.valueChanged.connect(self._update_nanowire_channels)
         channel_settings_layout.addLayout(axis_ch_layout)
         
+        # 添加更新按钮
+        update_channels_btn = QPushButton("Update Channels Settings")
+        update_channels_btn.clicked.connect(self._force_update_channels)
+        channel_settings_layout.addWidget(update_channels_btn) 
         
+        channel_settings.setLayout(channel_settings_layout)
         nanowire_layout.addWidget(channel_settings)
         
         # Voltage Settings
-        voltage_settings, voltage_settings_layout = self._create_standard_group("Voltage Settings")
+        voltage_settings = QGroupBox("Voltage Settings")
+        voltage_settings_layout = QVBoxLayout()
+        voltage_settings.setMaximumHeight(200)  # 限制高度
         
         # Movement Threshold
         movement_threshold_layout, self.movement_threshold_spin = self._create_labeled_spinbox("Movement Threshold (V):", 0.0, 5.0, 0.5, 0.1, True)
@@ -726,15 +825,67 @@ class OscilloscopeGUI(QMainWindow):
         movement_v_layout, self.movement_voltage_spin = self._create_labeled_spinbox("Movement (V):", 0.0, 10.0, 1.0, 0.1, True)
         self.movement_voltage_spin.valueChanged.connect(self._update_movement_voltage)
         voltage_settings_layout.addLayout(movement_v_layout)
-       # 添加更新按钮
-        update_channels_btn = QPushButton("Update Channels Settings")
-        update_channels_btn.clicked.connect(self._force_update_channels)
-        channel_settings_layout.addWidget(update_channels_btn) 
-        nanowire_layout.addWidget(voltage_settings)
         
+        voltage_settings.setLayout(voltage_settings_layout)
+        nanowire_layout.addWidget(voltage_settings)
+
+        # Target Position Settings
+        target_pos_group = QGroupBox("Target Position")
+        target_pos_layout = QGridLayout()
+        target_pos_group.setMaximumHeight(150)  # 限制高度
+        
+        # X Position
+        target_pos_layout.addWidget(QLabel("Target X:"), 0, 0)
+        self.target_x_spin = QSpinBox()
+        self.target_x_spin.setRange(0, 1920)
+        self.target_x_spin.setValue(960)
+        self.target_x_spin.valueChanged.connect(self._update_target_position)
+        target_pos_layout.addWidget(self.target_x_spin, 0, 1)
+        
+        # Y Position
+        target_pos_layout.addWidget(QLabel("Target Y:"), 1, 0)
+        self.target_y_spin = QSpinBox()
+        self.target_y_spin.setRange(0, 1080)
+        self.target_y_spin.setValue(540)
+        self.target_y_spin.valueChanged.connect(self._update_target_position)
+        target_pos_layout.addWidget(self.target_y_spin, 1, 1)
+        
+        # Set Target Button
+        self.btn_set_target = QPushButton("Set Target")
+        self.btn_set_target.clicked.connect(self._set_target_position)
+        target_pos_layout.addWidget(self.btn_set_target, 2, 0, 1, 2)
+        
+        target_pos_group.setLayout(target_pos_layout)
+        nanowire_layout.addWidget(target_pos_group)
+        
+        # Current Position Display
+        current_pos_group = QGroupBox("Current Position")
+        current_pos_layout = QGridLayout()
+        current_pos_group.setMaximumHeight(150)  # 限制高度
+        
+        # X Position
+        current_pos_layout.addWidget(QLabel("Current X:"), 0, 0)
+        self.current_x_label = QLabel("0")
+        current_pos_layout.addWidget(self.current_x_label, 0, 1)
+        
+        # Y Position
+        current_pos_layout.addWidget(QLabel("Current Y:"), 1, 0)
+        self.current_y_label = QLabel("0")
+        current_pos_layout.addWidget(self.current_y_label, 1, 1)
+    
+        # Theta Angle
+        current_pos_layout.addWidget(QLabel("Theta:"), 2, 0)
+        self.current_theta_label = QLabel("0.0°")
+        current_pos_layout.addWidget(self.current_theta_label, 2, 1)
+        
+        current_pos_group.setLayout(current_pos_layout)
+        nanowire_layout.addWidget(current_pos_group)
+    
         # Status Display
-        status_display = QGroupBox("Status")
+        status_display = QGroupBox("Linear Control Status")
+        status_display.setObjectName("Linear Control Status") 
         status_layout = QGridLayout()
+        status_display.setMaximumHeight(180)  # 限制高度
         
         # Movement Status
         status_layout.addWidget(QLabel("Movement:"), 0, 0)
@@ -758,45 +909,104 @@ class OscilloscopeGUI(QMainWindow):
         
         status_display.setLayout(status_layout)
         nanowire_layout.addWidget(status_display)
+
+        # Add trajectory visualization panel
+        trajectory_group = QGroupBox("Trajectory Visualization")
+        trajectory_layout = QVBoxLayout()
+        
+        # Create trajectory plot - 减小尺寸以适应标签页
+        self.trajectory_plot = pg.PlotWidget()
+        self.trajectory_plot.setBackground('w')
+        self.trajectory_plot.setLabel('left', 'Y Position', 'pixels')
+        self.trajectory_plot.setLabel('bottom', 'X Position', 'pixels')
+        self.trajectory_plot.setTitle('Nanowire Trajectory')
+        self.trajectory_plot.showGrid(x=True, y=True)
+        self.trajectory_plot.setMinimumHeight(250)  # 设置最小高度
+        self.trajectory_plot.setMinimumWidth(350)   # 设置最小宽度
+        
+        # 设置轨迹图的范围
+        self.trajectory_plot.setXRange(0, 1920)
+        self.trajectory_plot.setYRange(0, 1080)
+        
+        # Create curves for target path (red) and actual path (blue)
+        self.target_path = self.trajectory_plot.plot(pen=pg.mkPen('r', width=2), name="Target Path")
+        self.actual_path = self.trajectory_plot.plot(pen=pg.mkPen('b', width=2), name="Actual Path")
+        self.current_pos_marker = self.trajectory_plot.plot([0], [0], 
+                                                        pen=None, 
+                                                        symbol='o', 
+                                                        symbolSize=10, 
+                                                        symbolBrush='g')
+        
+        # 添加图例
+        legend = self.trajectory_plot.addLegend()
+        legend.addItem(self.target_path, "目标路径")
+        legend.addItem(self.actual_path, "实际路径")
+        
+        trajectory_layout.addWidget(self.trajectory_plot)
+        
+        # Add clear trajectory button
+        self.btn_clear_trajectory = QPushButton("Clear Trajectory")
+        self.btn_clear_trajectory.clicked.connect(self._clear_trajectory)
+        trajectory_layout.addWidget(self.btn_clear_trajectory)
+        
+        trajectory_group.setLayout(trajectory_layout)
+        nanowire_layout.addWidget(trajectory_group)
         
         nanowire_group.setLayout(nanowire_layout)
-        
-    
-        # Set fixed heights for groups to prevent them from expanding too much
-        storage_group.setMaximumHeight(120)
-        test_group.setMaximumHeight(300)
-        channel_group.setMaximumHeight(180)
-        settings_group.setMaximumHeight(100)
-        voltage_group.setMaximumHeight(150)
-        collection_group.setMaximumHeight(100)
-        nanowire_group.setMaximumHeight(400)
 
-        # Add all widgets to the layout
-        layout.addWidget(storage_group)
-        layout.addWidget(test_group)
-        layout.addWidget(channel_group)
-        layout.addWidget(settings_group)
-        layout.addWidget(voltage_group)
-        layout.addWidget(self.btn_connect)
-        layout.addWidget(self.btn_start)
-        layout.addWidget(self.btn_stop)
-        layout.addWidget(self.btn_save)
-        layout.addWidget(collection_group)
+        # 将纳米线控制组添加到主布局
         layout.addWidget(nanowire_group)
-        layout.addStretch()
-
-        # Set the layout to the container
+    
+        # 设置容器布局
         container.setLayout(layout)
         
-        # Add the container to the scroll area
+        # 将容器添加到滚动区域
         scroll.setWidget(container)
         
-        # Create the main panel layout
-        panel_layout = QVBoxLayout()
-        panel_layout.addWidget(scroll)
-        panel.setLayout(panel_layout)
-        self._update_nanowire_test_mode(Qt.Checked) 
-        return panel
+        # 创建标签页布局
+        tab_layout = QVBoxLayout()
+        tab_layout.addWidget(scroll)
+        tab.setLayout(tab_layout)
+        
+        return tab
+
+            
+    
+        # # Set fixed heights for groups to prevent them from expanding too much
+        # storage_group.setMaximumHeight(120)
+        # test_group.setMaximumHeight(300)
+        # channel_group.setMaximumHeight(180)
+        # settings_group.setMaximumHeight(100)
+        # voltage_group.setMaximumHeight(150)
+        # collection_group.setMaximumHeight(100)
+        # nanowire_group.setMaximumHeight(400)
+
+        # # Add all widgets to the layout
+        # layout.addWidget(storage_group)
+        # layout.addWidget(test_group)
+        # layout.addWidget(channel_group)
+        # layout.addWidget(settings_group)
+        # layout.addWidget(voltage_group)
+        # layout.addWidget(self.btn_connect)
+        # layout.addWidget(self.btn_start)
+        # layout.addWidget(self.btn_stop)
+        # layout.addWidget(self.btn_save)
+        # layout.addWidget(collection_group)
+        # layout.addWidget(nanowire_group)
+        # layout.addStretch()
+
+        # # Set the layout to the container
+        # container.setLayout(layout)
+        
+        # # Add the container to the scroll area
+        # scroll.setWidget(container)
+        
+        # # Create the main panel layout
+        # panel_layout = QVBoxLayout()
+        # panel_layout.addWidget(scroll)
+        # panel.setLayout(panel_layout)
+        # self._update_nanowire_test_mode(Qt.Checked) 
+        # return panel
 
     def _create_plot_panel(self):
         panel = QWidget()
@@ -1174,6 +1384,243 @@ class OscilloscopeGUI(QMainWindow):
         self._update_nanowire_status(status)
         self.status_bar.showMessage("Nanowire channels updated")
 
+
+
+    ## PID control slots 
+    def _update_pid_mode(self, state):
+        """Update PID control mode based on checkbox state"""
+        is_pid_mode = state == Qt.Checked
+        
+        # 更新控制器PID模式（如果不是测试模式）
+        if not self.nanowire_test_mode_cb.isChecked():
+            self.nanowire_controller.enable_pid_mode(is_pid_mode)
+        
+        # 启用/禁用目标位置控件
+        self.target_x_spin.setEnabled(is_pid_mode)
+        self.target_y_spin.setEnabled(is_pid_mode)
+        self.btn_set_target.setEnabled(is_pid_mode)
+        
+        # 启用/禁用线性控制状态显示
+        status_display = self.findChild(QGroupBox, "Linear Control Status")
+        if status_display:
+            status_display.setEnabled(not is_pid_mode)
+        
+        # 如果PID模式启用，启动位置更新定时器
+        if is_pid_mode:
+            # 初始化目标位置
+            if self.nanowire_test_mode_cb.isChecked():
+                # 测试模式下使用默认位置
+                current_pos = {'x': 960, 'y': 540, 'theta': 0.0}
+            else:
+                # 非测试模式从控制器获取位置
+                current_pos = self.nanowire_controller.get_current_position()
+            
+            self.target_x_spin.setValue(current_pos['x'])
+            self.target_y_spin.setValue(current_pos['y'])
+            
+            # 如果定时器未运行，启动定时器
+            if not hasattr(self, 'position_timer') or not self.position_timer.isActive():
+                self.position_timer = QTimer()
+                self.position_timer.timeout.connect(self._update_position_display)
+                self.position_timer.start(100)  # 每100ms更新一次
+        else:
+            # 停止位置更新定时器
+            if hasattr(self, 'position_timer') and self.position_timer.isActive():
+                self.position_timer.stop()
+    
+    def _update_position_display(self):
+        """更新位置显示和轨迹可视化"""
+        # 如果PID模式未启用，直接返回
+        if not self.pid_mode_cb.isChecked():
+            return
+        
+        # 获取当前位置
+        if self.nanowire_test_mode_cb.isChecked():
+            # 测试模式下，使用模拟位置
+            # 如果有目标位置，则模拟向目标位置移动
+            if hasattr(self, 'target_trajectory') and self.target_trajectory:
+                # 获取最新的目标位置
+                latest_target = self.target_trajectory[-1]
+                target_x = latest_target[1]
+                target_y = latest_target[2]
+                
+                # 获取当前位置（如果控制器中没有，则使用默认值）
+                if not hasattr(self.nanowire_controller, 'current_position'):
+                    self.nanowire_controller.current_position = {'x': 960, 'y': 540, 'theta': 0.0}
+                
+                current_pos = self.nanowire_controller.current_position
+                
+                # 简单模拟向目标位置移动（每次更新移动一小步）
+                step_size = 5  # 每次移动的像素数
+                
+                # 计算方向向量
+                dx = target_x - current_pos['x']
+                dy = target_y - current_pos['y']
+                
+                # 计算距离
+                distance = (dx**2 + dy**2)**0.5
+                
+                if distance > step_size:
+                    # 标准化方向向量并乘以步长
+                    move_x = dx / distance * step_size
+                    move_y = dy / distance * step_size
+                    
+                    # 更新当前位置
+                    new_x = current_pos['x'] + move_x
+                    new_y = current_pos['y'] + move_y
+                    
+                    # 计算角度（弧度转度）
+                    theta = np.arctan2(dy, dx) * 180 / np.pi
+                    
+                    # 更新控制器中的位置
+                    self.nanowire_controller.current_position = {'x': new_x, 'y': new_y, 'theta': theta}
+                    
+                    # 添加到位置历史
+                    if not hasattr(self.nanowire_controller, 'position_history'):
+                        self.nanowire_controller.position_history = []
+                    
+                    self.nanowire_controller.position_history.append((time.time(), new_x, new_y))
+                    
+                    # 限制历史记录长度
+                    max_history = 1000
+                    if len(self.nanowire_controller.position_history) > max_history:
+                        self.nanowire_controller.position_history = self.nanowire_controller.position_history[-max_history:]
+                    
+                    current_pos = self.nanowire_controller.current_position
+                else:
+                    # 已经非常接近目标，直接设置为目标位置
+                    self.nanowire_controller.current_position = {'x': target_x, 'y': target_y, 'theta': current_pos['theta']}
+                    
+                    # 添加到位置历史
+                    if not hasattr(self.nanowire_controller, 'position_history'):
+                        self.nanowire_controller.position_history = []
+                    
+                    self.nanowire_controller.position_history.append((time.time(), target_x, target_y))
+                    
+                    current_pos = self.nanowire_controller.current_position
+            else:
+                # 没有目标位置，使用当前位置
+                if not hasattr(self.nanowire_controller, 'current_position'):
+                    self.nanowire_controller.current_position = {'x': 960, 'y': 540, 'theta': 0.0}
+                current_pos = self.nanowire_controller.current_position
+        else:
+            # 非测试模式，从控制器获取实际位置
+            current_pos = self.nanowire_controller.get_current_position()
+        
+        # 更新位置标签
+        self.current_x_label.setText(str(int(current_pos['x'])))
+        self.current_y_label.setText(str(int(current_pos['y'])))
+        self.current_theta_label.setText(f"{current_pos['theta']:.1f}°")
+        
+        # 更新轨迹可视化
+        self._update_trajectory_plot()
+    
+    def _update_target_position(self):
+        """当微调框值变化时更新目标位置"""
+        if not self.pid_mode_cb.isChecked():
+            return
+        
+        x = self.target_x_spin.value()
+        y = self.target_y_spin.value()
+        
+        # 如果不是测试模式，更新控制器目标位置
+        if not self.nanowire_test_mode_cb.isChecked():
+            self.nanowire_controller.set_target_position(x, y)
+        else:
+            # 测试模式下，直接在控制器中设置目标位置
+            if not hasattr(self.nanowire_controller, 'target_position'):
+                self.nanowire_controller.target_position = {'x': x, 'y': y}
+            else:
+                self.nanowire_controller.target_position['x'] = x
+                self.nanowire_controller.target_position['y'] = y
+    
+    def _set_target_position(self):
+        """点击按钮时设置目标位置"""
+        x = self.target_x_spin.value()
+        y = self.target_y_spin.value()
+        
+        # 如果不是测试模式，更新控制器目标位置
+        if not self.nanowire_test_mode_cb.isChecked():
+            self.nanowire_controller.set_target_position(x, y)
+        else:
+            # 测试模式下，直接在控制器中设置目标位置
+            if not hasattr(self.nanowire_controller, 'target_position'):
+                self.nanowire_controller.target_position = {'x': x, 'y': y}
+            else:
+                self.nanowire_controller.target_position['x'] = x
+                self.nanowire_controller.target_position['y'] = y
+        
+        # 添加目标位置到轨迹
+        if not hasattr(self, 'target_trajectory'):
+            self.target_trajectory = []
+        
+        # 获取目标位置
+        if self.nanowire_test_mode_cb.isChecked():
+            target_pos = {'x': x, 'y': y}
+        else:
+            target_pos = self.nanowire_controller.get_target_position()
+        
+        self.target_trajectory.append((time.time(), target_pos['x'], target_pos['y']))
+        
+        # 更新轨迹图
+        self._update_trajectory_plot()
+    
+    def _update_trajectory_plot(self):
+        """更新轨迹可视化"""
+        # 获取位置历史
+        if self.nanowire_test_mode_cb.isChecked():
+            # 测试模式下，从控制器的position_history属性获取
+            if hasattr(self.nanowire_controller, 'position_history') and self.nanowire_controller.position_history:
+                position_history = self.nanowire_controller.position_history
+            else:
+                position_history = []
+        else:
+            # 非测试模式，从控制器方法获取
+            position_history = self.nanowire_controller.get_position_history()
+        
+        if position_history:
+            # 提取实际路径的x和y坐标
+            times_actual = [p[0] for p in position_history]
+            x_actual = [p[1] for p in position_history]
+            y_actual = [p[2] for p in position_history]
+            
+            # 更新实际路径曲线
+            self.actual_path.setData(x_actual, y_actual)
+            
+            # 更新当前位置标记
+            self.current_pos_marker.setData([x_actual[-1]], [y_actual[-1]])
+        
+        # 更新目标路径（如果有）
+        if hasattr(self, 'target_trajectory') and self.target_trajectory:
+            # 提取目标路径的x和y坐标
+            times_target = [p[0] for p in self.target_trajectory]
+            x_target = [p[1] for p in self.target_trajectory]
+            y_target = [p[2] for p in self.target_trajectory]
+            
+            # 更新目标路径曲线
+            self.target_path.setData(x_target, y_target)
+    
+    def _clear_trajectory(self):
+        """清除轨迹可视化"""
+        # 清除轨迹数据
+        if hasattr(self, 'target_trajectory'):
+            self.target_trajectory = []
+        
+        # 清除控制器位置历史
+        if self.nanowire_test_mode_cb.isChecked():
+            # 测试模式下，直接清除控制器的position_history属性
+            if hasattr(self.nanowire_controller, 'position_history'):
+                self.nanowire_controller.position_history = []
+        else:
+            # 非测试模式，使用控制器方法清除
+            self.nanowire_controller.position_history = []
+        
+        # 清除轨迹图
+        self.target_path.setData([], [])
+        self.actual_path.setData([], [])
+        self.current_pos_marker.setData([], [])
+
+
     def _update_test_mode(self, state):
         # Enable/disable test mode controls
         is_test_mode = state == Qt.Checked
@@ -1288,13 +1735,17 @@ class OscilloscopeGUI(QMainWindow):
         if not self.test_mode_cb.isChecked() or not self.active_channels:
             return
             
-        # 如果已经在运行，先停止当前采集
-        if self.running:
-            self._stop_acquisition()
-        
-        # 启动新的测试采集
-        self._start_acquisition()
-        self.status_bar.showMessage("Test signal acquisition started")
+        try:
+            # 如果已经在运行，先停止当前采集
+            if self.running:
+                self._stop_acquisition()
+            
+            # 启动新的测试采集
+            self._start_acquisition()
+            self.status_bar.showMessage("Test signal acquisition started")
+        except Exception as e:
+            print(f"Error triggering test signal: {e}")
+            self.status_bar.showMessage(f"Error: {str(e)}")
 
     def closeEvent(self, event):
         self._stop_acquisition()

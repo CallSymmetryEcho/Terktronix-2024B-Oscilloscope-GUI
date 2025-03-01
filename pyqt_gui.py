@@ -825,6 +825,12 @@ class OscilloscopeGUI(QMainWindow):
         movement_v_layout, self.movement_voltage_spin = self._create_labeled_spinbox("Movement (V):", 0.0, 10.0, 1.0, 0.1, True)
         self.movement_voltage_spin.valueChanged.connect(self._update_movement_voltage)
         voltage_settings_layout.addLayout(movement_v_layout)
+
+        # 添加移动步长控制
+        step_size_layout, self.step_size_spin = self._create_labeled_spinbox("Movement Step (pixels):", 1, 100, 10, 1, False)
+        self.step_size_spin.valueChanged.connect(self._update_movement_step_size)
+        voltage_settings_layout.addLayout(step_size_layout)
+        
         
         voltage_settings.setLayout(voltage_settings_layout)
         nanowire_layout.addWidget(voltage_settings)
@@ -838,7 +844,7 @@ class OscilloscopeGUI(QMainWindow):
         target_pos_layout.addWidget(QLabel("Target X:"), 0, 0)
         self.target_x_spin = QSpinBox()
         self.target_x_spin.setRange(0, 1920)
-        self.target_x_spin.setValue(960)
+        self.target_x_spin.setValue(10)
         self.target_x_spin.valueChanged.connect(self._update_target_position)
         target_pos_layout.addWidget(self.target_x_spin, 0, 1)
         
@@ -846,7 +852,7 @@ class OscilloscopeGUI(QMainWindow):
         target_pos_layout.addWidget(QLabel("Target Y:"), 1, 0)
         self.target_y_spin = QSpinBox()
         self.target_y_spin.setRange(0, 1080)
-        self.target_y_spin.setValue(540)
+        self.target_y_spin.setValue(10)
         self.target_y_spin.valueChanged.connect(self._update_target_position)
         target_pos_layout.addWidget(self.target_y_spin, 1, 1)
         
@@ -939,8 +945,8 @@ class OscilloscopeGUI(QMainWindow):
         
         # 添加图例
         legend = self.trajectory_plot.addLegend()
-        legend.addItem(self.target_path, "目标路径")
-        legend.addItem(self.actual_path, "实际路径")
+        legend.addItem(self.target_path, "Target Path")
+        legend.addItem(self.actual_path, "Actual Path")
         
         trajectory_layout.addWidget(self.trajectory_plot)
         
@@ -1166,14 +1172,40 @@ class OscilloscopeGUI(QMainWindow):
 
             # 更新纳米线控制器状态
             if control_signals:
+                # 更新控制信号，无论是否在PID模式下
                 self.nanowire_controller.update_control_signals(control_signals)
-                status = self.nanowire_controller.get_status()
-                self._update_nanowire_status(status)
+                
+                # 如果不在PID模式下，更新状态显示
+                if self.pid_mode_cb.isChecked():
+                    # 获取最新的目标位置
+                    target_pos = self.nanowire_controller.get_target_position()
+                    
+                    # 更新UI上的目标位置显示
+                    self.target_x_spin.blockSignals(True)
+                    self.target_y_spin.blockSignals(True)
+                    self.target_x_spin.setValue(int(target_pos['x']))
+                    self.target_y_spin.setValue(int(target_pos['y']))
+                    self.target_x_spin.blockSignals(False)
+                    self.target_y_spin.blockSignals(False)
+                    
+                    # 添加到目标轨迹
+                    if not hasattr(self, 'target_trajectory'):
+                        self.target_trajectory = []
+                    
+                    self.target_trajectory.append((time.time(), target_pos['x'], target_pos['y']))
+                    
+                    # 限制轨迹长度
+                    max_trajectory = 1000
+                    if len(self.target_trajectory) > max_trajectory:
+                        self.target_trajectory = self.target_trajectory[-max_trajectory:]
+                else:
+                    # 非PID模式下，更新状态显示
+                    status = self.nanowire_controller.get_status()
+                    self._update_nanowire_status(status)
             
             # 更新进度条
             elapsed = current_time
             self.progress_bar.setValue(int(elapsed % 100))
-
         except Exception as e:
             print(f"Error updating plots: {e}")
             print(f"Control signals: {control_signals}")
@@ -1378,6 +1410,7 @@ class OscilloscopeGUI(QMainWindow):
         self._update_voltage_threshold('direction')
         self._update_voltage_threshold('axis')
         self._update_movement_voltage()
+        self._update_movement_step_size() 
         print(f"Force update channels")
         # 获取并更新状态显示
         status = self.nanowire_controller.get_status()
@@ -1391,9 +1424,8 @@ class OscilloscopeGUI(QMainWindow):
         """Update PID control mode based on checkbox state"""
         is_pid_mode = state == Qt.Checked
         
-        # 更新控制器PID模式（如果不是测试模式）
-        if not self.nanowire_test_mode_cb.isChecked():
-            self.nanowire_controller.enable_pid_mode(is_pid_mode)
+        # 更新控制器PID模式
+        self.nanowire_controller.enable_pid_mode(is_pid_mode)
         
         # 启用/禁用目标位置控件
         self.target_x_spin.setEnabled(is_pid_mode)
@@ -1410,13 +1442,22 @@ class OscilloscopeGUI(QMainWindow):
             # 初始化目标位置
             if self.nanowire_test_mode_cb.isChecked():
                 # 测试模式下使用默认位置
-                current_pos = {'x': 960, 'y': 540, 'theta': 0.0}
+                current_pos = {'x': 10, 'y': 10, 'theta': 0.0}
             else:
                 # 非测试模式从控制器获取位置
                 current_pos = self.nanowire_controller.get_current_position()
             
             self.target_x_spin.setValue(current_pos['x'])
             self.target_y_spin.setValue(current_pos['y'])
+            
+            # 初始化目标轨迹
+            if not hasattr(self, 'target_trajectory'):
+                self.target_trajectory = []
+            else:
+                self.target_trajectory = []  # 清空现有轨迹
+                
+            # 添加初始目标位置到轨迹
+            self.target_trajectory.append((time.time(), current_pos['x'], current_pos['y']))
             
             # 如果定时器未运行，启动定时器
             if not hasattr(self, 'position_timer') or not self.position_timer.isActive():
@@ -1426,7 +1467,12 @@ class OscilloscopeGUI(QMainWindow):
         else:
             # 停止位置更新定时器
             if hasattr(self, 'position_timer') and self.position_timer.isActive():
-                self.position_timer.stop()
+                self.position_timer.stop() 
+
+    def _update_movement_step_size(self):
+        """更新移动步长"""
+        step_size = self.step_size_spin.value()
+        self.nanowire_controller._update_step_pixel_setting(step_size)
     
     def _update_position_display(self):
         """更新位置显示和轨迹可视化"""
@@ -1446,12 +1492,12 @@ class OscilloscopeGUI(QMainWindow):
                 
                 # 获取当前位置（如果控制器中没有，则使用默认值）
                 if not hasattr(self.nanowire_controller, 'current_position'):
-                    self.nanowire_controller.current_position = {'x': 960, 'y': 540, 'theta': 0.0}
+                    self.nanowire_controller.current_position = {'x': 10, 'y': 10, 'theta': 0.0}
                 
                 current_pos = self.nanowire_controller.current_position
                 
                 # 简单模拟向目标位置移动（每次更新移动一小步）
-                step_size = 5  # 每次移动的像素数
+                step_size = 10  # 每次移动的像素数
                 
                 # 计算方向向量
                 dx = target_x - current_pos['x']
@@ -1501,7 +1547,7 @@ class OscilloscopeGUI(QMainWindow):
             else:
                 # 没有目标位置，使用当前位置
                 if not hasattr(self.nanowire_controller, 'current_position'):
-                    self.nanowire_controller.current_position = {'x': 960, 'y': 540, 'theta': 0.0}
+                    self.nanowire_controller.current_position = {'x': 10, 'y': 10, 'theta': 0.0}
                 current_pos = self.nanowire_controller.current_position
         else:
             # 非测试模式，从控制器获取实际位置

@@ -1,12 +1,48 @@
 # Terktronix-2024B-Oscilloscope-GUI
 
-## Main interface
-![](https://lskypro.bin-lian.me/i/2025/02/25/67bd45b0a5978.jpg)
+
+## Usage
+
+~~~ shell
+pip install ./requirements.txt
+~~~
+
+~~~ python
+python pyqt_gui.py
+~~~
+
+# feature
+## signal capture
+- Generate Simulation signal for  testing
+- reading voltage or current signal from Arduino analog port
+- reading data from Terktronix 2024B Oscilloscope or Oscilloscope with USB interface
+## Nanowire controller
+- Nanowire controller communication with AWG
+- Linear control feature for nanowires
+- PID control feature for nanowires achieve ultra precision < 50nm
+
+# Main 
+![](https://lskypro.bin-lian.me/i/2025/03/01/67c297d56a493.jpg)
+
+## Signal capture feature
 
 
-## also nanowire control feature
+![](https://lskypro.bin-lian.me/i/2025/03/01/67c298b7bee07.png)
 
-![](https://lskypro.bin-lian.me/i/2025/02/25/67bd460a7eea6.jpg)
+- Real time voltage capture and display
+- 4 Channels support could open and close at anytime
+- Acuisition time for the refreshing rate
+- Well tuned signal saving feature
+![](https://lskypro.bin-lian.me/i/2025/03/01/67c299ede4271.jpg)
+![](https://lskypro.bin-lian.me/i/2025/03/01/67c29a1854604.png)
+
+# also nanowire control feature
+
+## Nanowire control panel
+![](https://lskypro.bin-lian.me/i/2025/03/01/67c29e2ad51fe.png)
+
+## PID controller with target path planning and visualize in real time
+![](https://lskypro.bin-lian.me/i/2025/03/01/67c29bf0cd518.png)
 
 ### 2025/02/25
 - ADD ARDUINO READ FEATURE

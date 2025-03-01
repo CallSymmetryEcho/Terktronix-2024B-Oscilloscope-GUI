@@ -34,7 +34,7 @@ class NanowireController:
         self.current_position = {'x': 0, 'y': 0, 'theta': 0}
         self.pid_mode = False  # Flag to enable/disable PID control
         self.position_history = []  # To store position history for trajectory display
-    
+        self.unit_pixel = 20  # 20 pixels per unit distance
     def set_channels(self, movement_ch, direction_ch, axis_ch):
         """Set channel numbers for different control signals"""
         self.movement_channel = movement_ch
@@ -102,20 +102,17 @@ class NanowireController:
                     self.move_x(voltage)
                 else:  # Y-axis movement
                     self.move_y(voltage)
-                
-                # If PID mode is enabled, calculate pixel movement based on time
-                if self.pid_mode and self.selected_nanowire_id is not None:
-                    self._update_position_by_voltage_time(movement_level, direction_level, axis_level)
         else:
             self.current_status['voltage'] = 0.0
             # Apply movement
-            if axis_level:  # X-axis movement
-                self.move_x(0)
-            else:  # Y-axis movement
-                self.move_y(0)
+            if not self.pid_mode:  # 只在非PID模式下应用零电压
+                if axis_level:  # X-axis movement
+                    self.move_x(0)
+                else:  # Y-axis movement
+                    self.move_y(0)
             
             # Reset movement time when voltage drops below threshold
-            self.last_movement_time = None
+            self.last_movement_time = None 
     
     def update_target_by_voltage_threshold(self, movement_level, direction_level, axis_level):
         """根据电压阈值更新目标位置
@@ -130,7 +127,7 @@ class NanowireController:
             return
             
         # 设置每次移动的步长（像素）
-        step_size = 10
+        step_size = self.unit_pixel
         
         # 根据方向确定步长正负
         if not direction_level:  # 负方向
@@ -158,6 +155,19 @@ class NanowireController:
         # 记录当前时间，用于计算下一次移动
         import time
         self.last_movement_time = time.time()
+
+        # 添加到目标位置历史（用于轨迹显示）
+        if not hasattr(self, 'target_history'):
+            self.target_history = []
+            
+        self.target_history.append((time.time(), self.target_x, self.target_y))
+        
+        # 限制历史记录长度
+        max_history = 1000
+        if len(self.target_history) > max_history:
+            self.target_history = self.target_history[-max_history:]
+            
+        print(f"Target updated: x={self.target_x}, y={self.target_y}")
     
     def move_x(self, voltage):
         """Move nanowire in X direction"""
@@ -180,7 +190,7 @@ class NanowireController:
         if enabled:
             # 如果是测试模式，使用默认位置
             if self.test_mode:
-                self.current_position = {'x': 960, 'y': 540, 'theta': 0.0}
+                self.current_position = {'x': 10, 'y': 10, 'theta': 0.0}
             else:
                 # 选择纳米线并获取初始位置
                 self._select_nanowire()
@@ -193,6 +203,11 @@ class NanowireController:
             print(f"PID mode enabled. Current position: x={self.current_position['x']}, y={self.current_position['y']}")
         else:
             print("PID mode disabled")
+
+    def _update_step_pixel_setting(self,step_size):
+        self.unit_pixel = step_size
+        print(f'update pixel setting, the step is now: {self.unit_pixel}')
+        return True
     
     def _select_nanowire(self):
         """Select nanowire for control"""
@@ -208,6 +223,22 @@ class NanowireController:
     
     def _update_current_position(self):
         """Update current nanowire position"""
+        # 测试模式下的处理
+        if self.test_mode:
+            # 如果在测试模式下，且当前位置已初始化，则直接添加到历史记录
+            if self.current_position:
+                # 添加到位置历史
+                self.position_history.append((
+                    time.time(),
+                    self.current_position['x'],
+                    self.current_position['y']
+                ))
+                # 限制历史记录长度
+                if len(self.position_history) > 1000:
+                    self.position_history = self.position_history[-1000:]
+                return True
+            return False
+
         try:
             if self.selected_nanowire_id is None:
                 return False

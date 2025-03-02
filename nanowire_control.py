@@ -1,7 +1,7 @@
 import numpy as np
 from datetime import datetime
 from nwm import controller
-
+import time
 class NanowireController:
     def __init__(self):
         self.movement_channel = 1  # Default channel for movement control

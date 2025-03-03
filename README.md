@@ -70,3 +70,9 @@ adding the nanowire controller PID controller features
 - real time PID Control
 
 the Minor bug is still exist, but the basic PID control is working now.
+
+## 2025/03/03
+
+adding the voltage speed mapping feature
+
+![](https://lskypro.bin-lian.me/i/2025/03/04/67c61ff52ba73.png)

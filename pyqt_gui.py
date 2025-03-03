@@ -309,7 +309,7 @@ class OscilloscopeGUI(QMainWindow):
             group.setMaximumHeight(max_height)
         return group, layout
 
-    def _create_labeled_spinbox(self, label_text, min_val, max_val, default_val, step=1.0, double=False):
+    def _create_labeled_spinbox(self, label_text, min_val, max_val, default_val, step=0.5, double=False):
         """Helper method to create   labeled spinbox"""
         layout = QHBoxLayout()
         layout.addWidget(QLabel(label_text))
@@ -505,7 +505,7 @@ class OscilloscopeGUI(QMainWindow):
             group.setMaximumHeight(max_height)
         return group, layout
 
-    def _create_labeled_spinbox(self, label_text, min_val, max_val, default_val, step=1.0, double=False):
+    def _create_labeled_spinbox(self, label_text, min_val, max_val, default_val, step=0.5, double=False):
         """Helper method to create a labeled spinbox"""
         layout = QHBoxLayout()
         layout.addWidget(QLabel(label_text))
@@ -805,6 +805,51 @@ class OscilloscopeGUI(QMainWindow):
         voltage_settings = QGroupBox("Voltage Settings")
         voltage_settings_layout = QVBoxLayout()
         voltage_settings.setMaximumHeight(200)  # 限制高度
+
+         # 添加Voltage Mapping设置
+        voltage_mapping = QGroupBox("Voltage Mapping")
+        voltage_mapping_layout = QVBoxLayout()
+        voltage_mapping.setMaximumHeight(200)
+        # 添加启用映射选项
+        mapping_enable_layout = QHBoxLayout()
+        mapping_enable_layout.addWidget(QLabel("Enable Mapping:"))
+        self.mapping_enable_cb = QCheckBox()
+        self.mapping_enable_cb.setChecked(False)
+        self.mapping_enable_cb.stateChanged.connect(self._update_mapping_enable)
+        mapping_enable_layout.addWidget(self.mapping_enable_cb)
+        mapping_enable_layout.addStretch()
+        voltage_mapping_layout.addLayout(mapping_enable_layout)
+
+        # Mapping Channel选择
+        mapping_ch_layout, self.mapping_ch_spin = self._create_labeled_spinbox("Mapping Channel:", 1, 4, 4)
+        voltage_mapping_layout.addLayout(mapping_ch_layout)
+
+        # 添加最小和最大步长设置
+        min_step_layout, self.min_step_spin = self._create_labeled_spinbox("Min Step (pixels/s):", 0.1, 10.0, 0.1, 0.1, True)
+        voltage_mapping_layout.addLayout(min_step_layout)
+        
+        max_step_layout, self.max_step_spin = self._create_labeled_spinbox("Max Step (pixels/s):", 0.1, 20.0, 10.0, 0.1, True)
+        voltage_mapping_layout.addLayout(max_step_layout)
+        
+        # 基线采集按钮
+        baseline_layout = QHBoxLayout()
+        self.btn_collect_low = QPushButton("Collect Low Baseline")
+        self.btn_collect_high = QPushButton("Collect High Baseline")
+        baseline_layout.addWidget(self.btn_collect_low)
+        baseline_layout.addWidget(self.btn_collect_high)
+        voltage_mapping_layout.addLayout(baseline_layout)
+        
+        # 当前映射状态显示
+        self.mapping_status = QLabel("Mapping Status: Not Configured")
+        voltage_mapping_layout.addWidget(self.mapping_status)
+        
+        # 连接信号
+        self.btn_collect_low.clicked.connect(lambda: self._start_baseline_collection('low'))
+        self.btn_collect_high.clicked.connect(lambda: self._start_baseline_collection('high'))
+        self.min_step_spin.valueChanged.connect(self._update_mapping_range)
+        self.max_step_spin.valueChanged.connect(self._update_mapping_range)
+        voltage_mapping.setLayout(voltage_mapping_layout)
+        nanowire_layout.addWidget(voltage_mapping)
         
         # Movement Threshold
         movement_threshold_layout, self.movement_threshold_spin = self._create_labeled_spinbox("Movement Threshold (V):", 0.0, 5.0, 0.5, 0.1, True)
@@ -827,7 +872,7 @@ class OscilloscopeGUI(QMainWindow):
         voltage_settings_layout.addLayout(movement_v_layout)
 
         # 添加移动步长控制
-        step_size_layout, self.step_size_spin = self._create_labeled_spinbox("Movement Step (pixels):", 1, 100, 10, 1, False)
+        step_size_layout, self.step_size_spin = self._create_labeled_spinbox("Movement Step (pixels):",0.1, 20.0, 0.1, 0.1, True)
         self.step_size_spin.valueChanged.connect(self._update_movement_step_size)
         voltage_settings_layout.addLayout(step_size_layout)
         
@@ -1129,6 +1174,11 @@ class OscilloscopeGUI(QMainWindow):
                             self.direction_ch_spin.value(), 
                             self.axis_ch_spin.value()]:
                     control_signals[ch] = current_voltage_value
+                # 添加电压映射处理
+                if ch == self.mapping_ch_spin.value():
+                    mapped_step = self.nanowire_controller.update_voltage_mapping(current_voltage_value)
+                    if mapped_step is not None:
+                        self.mapping_status.setText(f"Current Step: {mapped_step:.2f} pixel/s")
                  # 收集纳米线控制信号
                 # print(f"check the type {type(ch)} {ch}")
                 # if ch == self.movement_ch_spin.value():
@@ -1666,6 +1716,66 @@ class OscilloscopeGUI(QMainWindow):
         self.actual_path.setData([], [])
         self.current_pos_marker.setData([], [])
 
+    ## voltage speed mapping
+    def _start_baseline_collection(self, state):
+        """开始基线采集"""
+        if state == 'low':
+            self.btn_collect_low.setEnabled(False)
+            self.btn_collect_high.setEnabled(True)
+        else:
+            self.btn_collect_high.setEnabled(False)
+        
+        self.nanowire_controller.start_baseline_collection(state)
+        QTimer.singleShot(10000, lambda: self._stop_baseline_collection(state))
+        self.mapping_status.setText(f"Collecting {state} baseline...")
+
+    def _stop_baseline_collection(self, state):
+        """停止基线采集"""
+        self.nanowire_controller.stop_baseline_collection(state)
+        self.btn_collect_low.setEnabled(True)
+        self.btn_collect_high.setEnabled(True)
+        
+        if state == 'high':
+            self.mapping_status.setText("Mapping Configured")
+        else:
+            self.mapping_status.setText("Waiting for high baseline...")
+
+    def _update_mapping_enable(self, state):
+        """启用或禁用电压映射功能"""
+        is_enabled = state == Qt.Checked
+        
+        # 更新控件状态
+        self.mapping_ch_spin.setEnabled(is_enabled)
+        self.min_step_spin.setEnabled(is_enabled)
+        self.max_step_spin.setEnabled(is_enabled)
+        self.btn_collect_low.setEnabled(is_enabled)
+        self.btn_collect_high.setEnabled(is_enabled)
+        
+        # 禁用或启用原始步长设置
+        self.step_size_spin.setEnabled(not is_enabled)
+        
+        # 更新控制器映射状态
+        if hasattr(self.nanowire_controller, 'enable_voltage_mapping'):
+            self.nanowire_controller.enable_voltage_mapping(is_enabled)
+            
+        if is_enabled:
+            self.mapping_status.setText("Mapping: Enabled (Not Configured)")
+        else:
+            self.mapping_status.setText("Mapping: Disabled")
+            
+    def _update_mapping_range(self):
+        """更新映射范围"""
+        min_step = self.min_step_spin.value()
+        max_step = self.max_step_spin.value()
+        
+        # 确保最小值不大于最大值
+        if min_step > max_step:
+            self.min_step_spin.setValue(max_step)
+            min_step = max_step
+            
+        # 更新控制器映射范围
+        if hasattr(self.nanowire_controller, 'set_mapping_range'):
+            self.nanowire_controller.set_mapping_range(min_step, max_step)
 
     def _update_test_mode(self, state):
         # Enable/disable test mode controls

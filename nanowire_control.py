@@ -14,6 +14,18 @@ class NanowireController:
         self.axis_threshold = 0.5
         self.movement_voltage = 1.0  # Voltage to apply when moving
         
+
+     #speed mapping
+        self.voltage_mapping_channel = 4  # 默认使用第4通道进行映射
+        self.baseline_low = None  # 静止状态基线
+        self.baseline_high = None  # 拉伸状态基线
+        self.is_collecting_baseline = False
+        self.baseline_collection_start = None
+        self.baseline_values = {'low': [], 'high': []}
+        self.mapping_resolution = 512  # 映射分辨率
+        self.min_step = 0.1  # 最小步长 (pixel/s)
+        self.max_step = 10.0  # 最大步长 (pixel/s)
+        
         self.current_status = {
             'is_moving': False,
             'direction': '+',  # '+' or '-'
@@ -337,3 +349,63 @@ class NanowireController:
                 print(f"Moving to target: x={self.target_x}, y={self.target_y}")
             except Exception as e:
                 print(f"Error applying PID control: {e}")
+
+### mapping section -------
+    def enable_voltage_mapping(self, enabled=True):
+        """启用或禁用电压映射功能"""
+        self.is_voltage_mapping_enabled = enabled
+        print(f"Voltage mapping {'enabled' if enabled else 'disabled'}")
+        
+    def set_mapping_range(self, min_step, max_step):
+        """设置映射步长范围"""
+        self.min_step = min_step
+        self.max_step = max_step
+        print(f"Mapping range set: {min_step} to {max_step} pixel/s")
+
+    def start_baseline_collection(self, state='low'):
+        """开始基线采集"""
+        self.is_collecting_baseline = True
+        self.baseline_collection_start = time.time()
+        self.baseline_values[state] = []
+        print(f"Started collecting {state} baseline")
+        
+    def stop_baseline_collection(self, state='low'):
+        """停止基线采集并计算平均值"""
+        if self.baseline_values[state]:
+            if state == 'low':
+                self.baseline_low = np.mean(self.baseline_values[state])
+            else:
+                self.baseline_high = np.mean(self.baseline_values[state])
+            print(f"{state} baseline: {self.baseline_low if state == 'low' else self.baseline_high:.3f}V")
+        self.is_collecting_baseline = False
+        
+    def update_voltage_mapping(self, voltage):
+        """更新电压映射"""
+        if not hasattr(self, 'is_voltage_mapping_enabled') or not self.is_voltage_mapping_enabled:
+            return None
+            
+        if self.is_collecting_baseline:
+            current_time = time.time()
+            if current_time - self.baseline_collection_start <= 10:  # 10秒采集时间
+                if self.baseline_low is None:
+                    self.baseline_values['low'].append(voltage)
+                else:
+                    self.baseline_values['high'].append(voltage)
+            else:
+                # 自动停止采集
+                state = 'low' if self.baseline_low is None else 'high'
+                self.stop_baseline_collection(state)
+        
+        # 如果两个基线都已采集，计算映射步长
+        if self.baseline_low is not None and self.baseline_high is not None:
+            voltage_range = abs(self.baseline_high - self.baseline_low)
+            if voltage_range > 0:
+                current_diff = abs(voltage - self.baseline_low)
+                # 映射到0-511范围
+                mapped_value = int((current_diff / voltage_range) * (self.mapping_resolution - 1))
+                # 映射到步长范围
+                step_range = self.max_step - self.min_step
+                step_size = self.min_step + (step_range * mapped_value / (self.mapping_resolution - 1))
+                self.unit_pixel = step_size
+                return step_size
+        return None

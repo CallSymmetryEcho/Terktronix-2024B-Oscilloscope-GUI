@@ -22,32 +22,32 @@ python pyqt_gui.py
 - PID control feature for nanowires achieve ultra precision < 50nm
 
 # Main 
-![](https://lskypro.bin-lian.me/i/2025/03/01/67c297d56a493.jpg)
+![](https://lskypro.bin-lian.com/i/2025/03/01/67c297d56a493.jpg)
 
 ## Signal capture feature
 
 
-![](https://lskypro.bin-lian.me/i/2025/03/01/67c298b7bee07.png)
+![](https://lskypro.bin-lian.com/i/2025/03/01/67c298b7bee07.png)
 
 - Real time voltage capture and display
 - 4 Channels support could open and close at anytime
 - Acuisition time for the refreshing rate
 - Well tuned signal saving feature
-![](https://lskypro.bin-lian.me/i/2025/03/01/67c299ede4271.jpg)
-![](https://lskypro.bin-lian.me/i/2025/03/01/67c29a1854604.png)
+![](https://lskypro.bin-lian.com/i/2025/03/01/67c299ede4271.jpg)
+![](https://lskypro.bin-lian.com/i/2025/03/01/67c29a1854604.png)
 
 # also nanowire control feature
 
 ## Nanowire control panel
-![](https://lskypro.bin-lian.me/i/2025/03/01/67c29e2ad51fe.png)
+![](https://lskypro.bin-lian.com/i/2025/03/01/67c29e2ad51fe.png)
 
 ## PID controller with target path planning and visualize in real time
-![](https://lskypro.bin-lian.me/i/2025/03/01/67c29bf0cd518.png)
+![](https://lskypro.bin-lian.com/i/2025/03/01/67c29bf0cd518.png)
 
 ### 2025/02/25
 - ADD ARDUINO READ FEATURE
 
-![](https://lskypro.bin-lian.me/i/2025/02/25/67bd6268d8b14.png)
+![](https://lskypro.bin-lian.com/i/2025/02/25/67bd6268d8b14.png)
 
 
 with proper Arduino nano or better board and RC low pass circuits, confident measure signal change < 10ms wit smooth signal detection
@@ -75,4 +75,4 @@ the Minor bug is still exist, but the basic PID control is working now.
 
 adding the voltage speed mapping feature
 
-![](https://lskypro.bin-lian.me/i/2025/03/04/67c61ff52ba73.png)
+![](https://lskypro.bin-lian.com/i/2025/03/04/67c61ff52ba73.png)

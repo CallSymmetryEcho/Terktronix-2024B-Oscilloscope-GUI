@@ -1179,6 +1179,11 @@ class OscilloscopeGUI(QMainWindow):
                     mapped_step = self.nanowire_controller.update_voltage_mapping(current_voltage_value)
                     if mapped_step is not None:
                         self.mapping_status.setText(f"Current Step: {mapped_step:.2f} pixel/s")
+                 # 如果正在收集数据，保存到collection_data
+                if self.collecting and ch in self.active_channels:
+                    if ch not in self.collection_data:
+                        self.collection_data[ch] = []
+                    self.collection_data[ch].append([current_time, current_voltage_value])
                  # 收集纳米线控制信号
                 # print(f"check the type {type(ch)} {ch}")
                 # if ch == self.movement_ch_spin.value():
@@ -1829,14 +1834,18 @@ class OscilloscopeGUI(QMainWindow):
             
         self.collecting = False
 
-        # 如果是Arduino模式，发送停止命令
-        if self.data_source == "arduino" and self.arduino:
-                    if not self.arduino.stop_acquisition():
-                        self.status_bar.showMessage("Failed to stop Arduino recording")
-                        return
+        # # 如果是Arduino模式，发送停止命令
+        # if self.data_source == "arduino" and self.arduino:
+        #     if not self.arduino.stop_acquisition():
+        #         self.status_bar.showMessage("Failed to stop Arduino recording")
+        #         return
 
         self.btn_collect_start.setEnabled(True)
         self.btn_collect_stop.setEnabled(False)
+        
+        # 确保数据目录存在
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
         
         # 弹出标注对话框
         label, ok = QInputDialog.getText(self, 'Data Label', 'Enter label for the collected data:')
@@ -1849,23 +1858,31 @@ class OscilloscopeGUI(QMainWindow):
                 os.makedirs(label_dir)
             
             # 保存每个通道的数据到标注子目录
+            saved_count = 0
             for ch in self.active_channels:
                 if ch in self.collection_data and self.collection_data[ch]:
                     filename = os.path.join(label_dir, f'CH{ch}_{timestamp}.csv')
-                    data_array = np.array(self.collection_data[ch])
-                    np.savetxt(filename, data_array,
-                              delimiter=',',
-                              header='Time(s),Voltage(V)',
-                              comments='',
-                              fmt=['%.3f', '%.6f'])
+                    try:
+                        data_array = np.array(self.collection_data[ch])
+                        np.savetxt(filename, data_array,
+                                  delimiter=',',
+                                  header='Time(s),Voltage(V)',
+                                  comments='',
+                                  fmt=['%.6f', '%.6f'])
+                        saved_count += 1
+                    except Exception as e:
+                        print(f"Error saving channel {ch} data: {e}")
             
-            self.status_bar.showMessage(f"Data saved in {label_dir}")
+            if saved_count > 0:
+                self.status_bar.showMessage(f"Saved data from {saved_count} channels to {label_dir}")
+            else:
+                self.status_bar.showMessage("No data was saved, collection data might be empty")
         else:
             self.status_bar.showMessage("Data collection cancelled")
         
+        # 清空采集数据
         self.collection_data = {}
     
-   
     def _change_storage_path(self):
         new_path = QFileDialog.getExistingDirectory(self, "Select Storage Directory", self.data_dir)
         if new_path:
